@@ -79,7 +79,13 @@ export function ArticlePage() {
 
         <figure>
           <Photo src={article.photo_url} variant="news" fallback="megaphone" alt="" />
-          {!article.photo_url?.startsWith('http') && <figcaption>Illustration. A real photo can be added by the school office.</figcaption>}
+          {article.photo_url?.includes('images.unsplash.com') ? (
+            <figcaption>Photo: Unsplash</figcaption>
+          ) : (
+            !article.photo_url?.startsWith('http') && (
+              <figcaption>Illustration. A real photo can be added by the school office.</figcaption>
+            )
+          )}
         </figure>
 
         <div className="article__body">
