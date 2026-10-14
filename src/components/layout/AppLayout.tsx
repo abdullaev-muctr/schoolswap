@@ -16,7 +16,10 @@ export function AppLayout() {
   const { data: conversations = [] } = useConversations(!!userId);
   const unread = userId ? conversations.filter((c) => isUnread(c, userId)).length : 0;
 
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // Braces matter: newer Chrome returns a Promise from scrollTo, and React would call it as a cleanup.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
 
   return (
     <div className={profile ? 'has-tabbar' : undefined}>
