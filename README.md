@@ -20,7 +20,7 @@ Supabase
 
 - Переписку видят только её два участника (RLS + Realtime тоже фильтрует по RLS).
 - Редактировать/удалять объявление может только продавец; новости — только `role = 'admin'`.
-- Роль нельзя поменять с фронтенда: админа назначает только скрипт `seed` или SQL.
+- Роль нельзя поменять с фронтенда: админа назначает только SQL (`supabase/seed.sql`).
 - Фото с телефона сжимаются в браузере до 1600 px JPEG перед загрузкой.
 - Если сеть блокирует WebSocket, данные всё равно обновляются фоновой проверкой раз в 30 секунд.
 
@@ -39,7 +39,7 @@ src/
   pages/                Landing, Auth, Market, ListingPage, SellPage, MyListings, Messages, News, ArticlePage, ArticleEditor
   styles/               tokens.css (цвета/шрифты) → base → ui → layout → страницы
 supabase/migrations/    схема БД и правила доступа
-scripts/seed.mjs        админ School Office + демо-ученики, объявления и DEMO-новости
+supabase/seed.sql       админ School Office + демо-ученики, объявления и DEMO-новости
 ```
 
 ## Запуск в продакшене (≈30 минут)
@@ -55,21 +55,19 @@ scripts/seed.mjs        админ School Office + демо-ученики, об
 
 ### 2. Аккаунт администратора и демо-данные
 
-```bash
-cp .env.seed.example .env.seed.local   # URL проекта, service_role key (Project Settings → API), почта и пароль админа
-npm install
-npm run seed
-```
+1. Открой `supabase/seed.sql` и в начале блока `do $$` впиши `admin_email`, `admin_password` и `demo_password`.
+   **Не коммить файл с настоящими паролями.**
+2. **SQL Editor → New query** → вставь файл целиком → **Run**.
 
-Создаёт админа **School Office**, 4 демо-учеников, 10 демо-объявлений и 8 новостей с пометкой DEMO. Скрипт можно запускать повторно: демо-данные пересоздаются.
-
-> `service_role` key — секрет. Он нужен только для `seed` и никогда не должен попасть во фронтенд или в git.
+Скрипт создаёт админа **School Office**, 4 демо-учеников (`*.demo@example.com`), 10 демо-объявлений и 8 новостей с пометкой DEMO.
+Запускать можно повторно: пароли обновятся, демо-данные пересоздадутся.
 
 ### 3. Vercel
 
 1. Залей репозиторий на GitHub.
 2. [vercel.com](https://vercel.com) → **Add New → Project** → выбери репозиторий (Vite определится сам).
-3. **Environment Variables**: `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` (Project Settings → API → anon public).
+3. **Environment Variables**: `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` (Project Settings → API Keys → Publishable key).
+   Секретный ключ (secret / service_role) сайту не нужен — никуда его не вставляй.
 4. **Deploy.** `vercel.json` уже перенаправляет все пути на SPA.
 
 ### 4. Домен и HTTPS
@@ -84,8 +82,8 @@ npm run seed
 ```bash
 npm install
 npx supabase start          # Supabase в Docker; применяет миграции
-cp .env.example .env.local  # вставь API URL и anon key из вывода supabase start
-npm run seed                # .env.seed.local с локальными ключами
+cp .env.example .env.local  # вставь API_URL и ANON_KEY из вывода supabase start
+# демо-данные: впиши пароли в копию supabase/seed.sql и выполни её через psql
 npm run dev                 # http://localhost:5173
 ```
 
