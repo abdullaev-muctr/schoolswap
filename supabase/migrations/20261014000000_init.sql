@@ -1,10 +1,11 @@
 -- SchoolSwap schema: profiles, listings, conversations, messages, articles, photo storage.
 -- Every table has row level security; access rules live here, not in the frontend.
+-- Idempotent: safe to run again (e.g. after a partial run in the SQL Editor).
 
 ------------------------------------------------------------------------------
 -- Profiles (one per auth user)
 ------------------------------------------------------------------------------
-create table public.profiles (
+create table if not exists public.profiles (
   id         uuid primary key references auth.users on delete cascade,
   name       text not null check (char_length(name) between 2 and 60),
   role       text not null default 'student' check (role in ('student', 'admin')),
@@ -13,9 +14,11 @@ create table public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Signed-in users can read profiles" on public.profiles;
 create policy "Signed-in users can read profiles"
   on public.profiles for select to authenticated using (true);
 
+drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
   on public.profiles for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
@@ -24,7 +27,7 @@ create policy "Users can update their own profile"
 revoke update on public.profiles from authenticated, anon;
 grant update (name) on public.profiles to authenticated;
 
-create function public.handle_new_user()
+create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.profiles (id, name)
@@ -33,11 +36,12 @@ begin
 end;
 $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
-create function public.is_admin()
+create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
 $$;
@@ -45,7 +49,7 @@ $$;
 ------------------------------------------------------------------------------
 -- Listings
 ------------------------------------------------------------------------------
-create table public.listings (
+create table if not exists public.listings (
   id          uuid primary key default gen_random_uuid(),
   seller_id   uuid not null default auth.uid() references public.profiles on delete cascade,
   title       text not null check (char_length(title) between 3 and 70),
@@ -58,29 +62,33 @@ create table public.listings (
   created_at  timestamptz not null default now()
 );
 
-create index listings_created_at_idx on public.listings (created_at desc);
-create index listings_seller_idx on public.listings (seller_id);
+create index if not exists listings_created_at_idx on public.listings (created_at desc);
+create index if not exists listings_seller_idx on public.listings (seller_id);
 
 alter table public.listings enable row level security;
 
 -- Visitors see listings on the landing page; seller names stay behind login (profiles).
+drop policy if exists "Anyone can read listings" on public.listings;
 create policy "Anyone can read listings"
   on public.listings for select to anon, authenticated using (true);
 
+drop policy if exists "Users create their own listings" on public.listings;
 create policy "Users create their own listings"
   on public.listings for insert to authenticated with check (seller_id = auth.uid());
 
+drop policy if exists "Sellers update their own listings" on public.listings;
 create policy "Sellers update their own listings"
   on public.listings for update to authenticated
   using (seller_id = auth.uid()) with check (seller_id = auth.uid());
 
+drop policy if exists "Sellers delete their own listings" on public.listings;
 create policy "Sellers delete their own listings"
   on public.listings for delete to authenticated using (seller_id = auth.uid());
 
 ------------------------------------------------------------------------------
 -- Conversations: one per (listing, buyer). Only the two participants can see it.
 ------------------------------------------------------------------------------
-create table public.conversations (
+create table if not exists public.conversations (
   id                  uuid primary key default gen_random_uuid(),
   listing_id          uuid references public.listings on delete set null,
   listing_title       text not null,
@@ -96,11 +104,12 @@ create table public.conversations (
   check (buyer_id <> seller_id)
 );
 
-create index conversations_buyer_idx on public.conversations (buyer_id);
-create index conversations_seller_idx on public.conversations (seller_id);
+create index if not exists conversations_buyer_idx on public.conversations (buyer_id);
+create index if not exists conversations_seller_idx on public.conversations (seller_id);
 
 alter table public.conversations enable row level security;
 
+drop policy if exists "Participants read their conversations" on public.conversations;
 create policy "Participants read their conversations"
   on public.conversations for select to authenticated
   using (auth.uid() in (buyer_id, seller_id));
@@ -108,7 +117,7 @@ create policy "Participants read their conversations"
 -- Conversations are created only through start_conversation(), which checks the listing.
 revoke insert, update, delete on public.conversations from authenticated, anon;
 
-create function public.start_conversation(p_listing_id uuid)
+create or replace function public.start_conversation(p_listing_id uuid)
 returns uuid language plpgsql security definer set search_path = '' as $$
 declare
   v_listing public.listings;
@@ -135,7 +144,7 @@ begin
 end;
 $$;
 
-create function public.mark_conversation_read(p_conversation_id uuid)
+create or replace function public.mark_conversation_read(p_conversation_id uuid)
 returns void language sql security definer set search_path = '' as $$
   update public.conversations set
     buyer_read_at  = case when buyer_id  = auth.uid() then now() else buyer_read_at  end,
@@ -146,7 +155,7 @@ $$;
 ------------------------------------------------------------------------------
 -- Messages
 ------------------------------------------------------------------------------
-create table public.messages (
+create table if not exists public.messages (
   id              uuid primary key default gen_random_uuid(),
   conversation_id uuid not null references public.conversations on delete cascade,
   sender_id       uuid not null default auth.uid() references public.profiles on delete cascade,
@@ -154,11 +163,11 @@ create table public.messages (
   created_at      timestamptz not null default now()
 );
 
-create index messages_conversation_idx on public.messages (conversation_id, created_at);
+create index if not exists messages_conversation_idx on public.messages (conversation_id, created_at);
 
 alter table public.messages enable row level security;
 
-create function public.is_participant(p_conversation_id uuid)
+create or replace function public.is_participant(p_conversation_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.conversations
@@ -166,16 +175,18 @@ returns boolean language sql stable security definer set search_path = '' as $$
   );
 $$;
 
+drop policy if exists "Participants read messages" on public.messages;
 create policy "Participants read messages"
   on public.messages for select to authenticated
   using (public.is_participant(conversation_id));
 
+drop policy if exists "Participants send messages as themselves" on public.messages;
 create policy "Participants send messages as themselves"
   on public.messages for insert to authenticated
   with check (sender_id = auth.uid() and public.is_participant(conversation_id));
 
 -- Keep the inbox preview and the sender's read marker up to date.
-create function public.on_message_sent()
+create or replace function public.on_message_sent()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   update public.conversations set
@@ -189,6 +200,7 @@ begin
 end;
 $$;
 
+drop trigger if exists on_message_sent on public.messages;
 create trigger on_message_sent
   after insert on public.messages
   for each row execute function public.on_message_sent();
@@ -196,7 +208,7 @@ create trigger on_message_sent
 ------------------------------------------------------------------------------
 -- School News articles: everyone reads, only admins write.
 ------------------------------------------------------------------------------
-create table public.articles (
+create table if not exists public.articles (
   id           uuid primary key default gen_random_uuid(),
   author_id    uuid default auth.uid() references public.profiles on delete set null,
   author_name  text not null default 'School Office',
@@ -210,19 +222,23 @@ create table public.articles (
   published_at timestamptz not null default now()
 );
 
-create index articles_published_idx on public.articles (published_at desc);
+create index if not exists articles_published_idx on public.articles (published_at desc);
 
 alter table public.articles enable row level security;
 
+drop policy if exists "Anyone can read articles" on public.articles;
 create policy "Anyone can read articles"
   on public.articles for select to anon, authenticated using (true);
 
+drop policy if exists "Admins insert articles" on public.articles;
 create policy "Admins insert articles"
   on public.articles for insert to authenticated with check (public.is_admin());
 
+drop policy if exists "Admins update articles" on public.articles;
 create policy "Admins update articles"
   on public.articles for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "Admins delete articles" on public.articles;
 create policy "Admins delete articles"
   on public.articles for delete to authenticated using (public.is_admin());
 
@@ -233,10 +249,12 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('photos', 'photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 on conflict (id) do nothing;
 
+drop policy if exists "Users upload photos to their own folder" on storage.objects;
 create policy "Users upload photos to their own folder"
   on storage.objects for insert to authenticated
   with check (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
+drop policy if exists "Users delete their own photos" on storage.objects;
 create policy "Users delete their own photos"
   on storage.objects for delete to authenticated
   using (bucket_id = 'photos' and (storage.foldername(name))[1] = auth.uid()::text);
@@ -244,4 +262,16 @@ create policy "Users delete their own photos"
 ------------------------------------------------------------------------------
 -- Realtime: push row changes to open browsers. RLS still decides who receives what.
 ------------------------------------------------------------------------------
-alter publication supabase_realtime add table public.listings, public.articles, public.conversations, public.messages;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['listings', 'articles', 'conversations', 'messages'] loop
+    if not exists (
+      select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end;
+$$;
