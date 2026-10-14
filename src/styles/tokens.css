@@ -1,0 +1,55 @@
+/* Design tokens. The app shell is "night crest" (black, crest navy, condensed caps);
+   School News switches to a white newspaper page. Change colours and fonts here only. */
+:root {
+  /* Night shell */
+  --bg: #050608;
+  --panel: #0b1018;
+  --panel-2: #101824;
+  --panel-deep: #07090d;
+  --line: #1b2634;
+  --line-2: #2a3a4f;
+  --text: #f2f4f7;
+  --muted: #aab4c0;
+  --dim: #8793a2;
+
+  /* Brand */
+  --navy: #003768;
+  --navy-hover: #0a4a88;
+  --navy-deep: #04192f;
+  --blue: #3f78b8;
+  --blue-2: #6f9fd4;
+  --steel: #999999;
+  --on-navy: #c9d8ea;
+
+  /* Status */
+  --ok: #7fc29b;
+  --warn: #e8b45a;
+  --bad: #e7837a;
+  --bad-line: #5a2a2a;
+
+  /* Newspaper */
+  --paper: #ffffff;
+  --paper-ink: #121212;
+  --paper-muted: #5a5a5a;
+  --paper-rule: #dcdcdc;
+  --paper-alert: #a33a1f;
+  --demo-bg: #fff4d6;
+  --demo-ink: #5c4300;
+  --demo-line: #ecd9a3;
+
+  /* Type */
+  --display: "Barlow Condensed", "DIN Condensed", "Arial Narrow", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --serif-d: "Libre Caslon Display", "Libre Caslon Text", Georgia, serif;
+  --serif: "Libre Caslon Text", Georgia, "Times New Roman", serif;
+  --sans-news: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+
+  /* Layout */
+  --gl: max(16px, env(safe-area-inset-left, 0px));
+  --gr: max(16px, env(safe-area-inset-right, 0px));
+  --header-h: 64px;
+  --tabbar-h: 76px;
+  --max-w: 1180px;
+
+  color-scheme: dark;
+}
